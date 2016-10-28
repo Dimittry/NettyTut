@@ -1,4 +1,4 @@
-package com.nettytut.echoTut.server;
+package com.nettytut.server;
 
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.ChannelFuture;
