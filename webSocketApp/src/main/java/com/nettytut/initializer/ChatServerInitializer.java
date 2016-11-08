@@ -3,6 +3,7 @@ package com.nettytut.initializer;
 import com.nettytut.handlers.HttpRequestHandler;
 import com.nettytut.handlers.TelnetServerHandler;
 import com.nettytut.handlers.TextWebSocketFrameHandler;
+import com.nettytut.model.User;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelPipeline;
@@ -16,14 +17,19 @@ import io.netty.handler.codec.string.StringDecoder;
 import io.netty.handler.codec.string.StringEncoder;
 import io.netty.handler.stream.ChunkedWriteHandler;
 
+import java.util.Map;
+
 public class ChatServerInitializer
         extends ChannelInitializer<Channel>{
-    private final ChannelGroup group;
+    private final Map<String, ChannelGroup> group;
+    private final Map<Channel, User> userGroup;
     private static final StringDecoder DECODER = new StringDecoder();
     private static final StringEncoder ENCODER = new StringEncoder();
 
-    public ChatServerInitializer(ChannelGroup group) {
+    public ChatServerInitializer(Map<String, ChannelGroup> group,
+                                 Map<Channel, User> userGroup) {
         this.group = group;
+        this.userGroup = userGroup;
     }
 
     @Override
@@ -43,6 +49,6 @@ public class ChatServerInitializer
         pipeline.addLast(DECODER);
         pipeline.addLast(ENCODER);
         // and then business logic.
-        pipeline.addLast(new TelnetServerHandler(group));
+        pipeline.addLast(new TelnetServerHandler(group, userGroup));
     }
 }
