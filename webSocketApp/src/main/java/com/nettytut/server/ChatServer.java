@@ -21,7 +21,8 @@ public class ChatServer {
     private final ChannelGroup channelGroup =
             new DefaultChannelGroup(ImmediateEventExecutor.INSTANCE);
     private final Map<String, ChannelGroup> channelGroups = new HashMap<>();
-    private final Map<Channel, User> userGroup = new HashMap<>();
+   // private final Map<Channel, User> userGroup = new HashMap<>();
+    private final Map<User, String> userChatChannelMap = new HashMap<>();
     private final EventLoopGroup group = new NioEventLoopGroup();
     private Channel channel;
 
@@ -31,7 +32,7 @@ public class ChatServer {
         bootstrap.group(group)
                 .channel(NioServerSocketChannel.class)
                 //.childHandler(createInitializer(channelGroup));
-                .childHandler(createInitializer(channelGroups, userGroup));
+                .childHandler(createInitializer(channelGroups, userChatChannelMap));
         ChannelFuture future = bootstrap.bind(address);
         future.syncUninterruptibly();
         channel = future.channel();
@@ -44,8 +45,8 @@ public class ChatServer {
 
     protected ChannelInitializer<Channel> createInitializer(
             Map<String, ChannelGroup> group,
-            Map<Channel, User> userGroup) {
-        return new ChatServerInitializer(group, userGroup);
+            Map<User, String> userChatChannelMap) {
+        return new ChatServerInitializer(group, userChatChannelMap);
     }
 
     public void destroy() {

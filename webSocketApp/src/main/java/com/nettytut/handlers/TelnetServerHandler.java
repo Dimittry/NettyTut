@@ -17,18 +17,15 @@ import java.util.Map;
  */
 @Sharable
 public class TelnetServerHandler extends SimpleChannelInboundHandler<String> {
-    static final Map<String, String> userChannelGroupMap;
-
-    static {
-        userChannelGroupMap = new HashMap<>();
-    }
 
     private final Map<String, ChannelGroup> group;
-    private final Map<Channel, User> userGroup;
+    private final Map<User, String> userChatChannelMap;
+    private User user;
+    private String chatChannel;
 
-    public TelnetServerHandler(Map<String, ChannelGroup> group, Map<Channel, User> userGroup) {
+    public TelnetServerHandler(Map<String, ChannelGroup> group, Map<User, String> userChatChannelMap) {
         this.group = group;
-        this.userGroup = userGroup;
+        this.userChatChannelMap = userChatChannelMap;
     }
 
     @Override
@@ -61,7 +58,7 @@ public class TelnetServerHandler extends SimpleChannelInboundHandler<String> {
             showAllUsersFromChannel(ctx);
         } else {
             //response = "Did you say '" + request + "'?\r\n";
-            if(checkUserAuthorization(ctx)) {
+            if(checkUserAuthorization()) {
                 showMessage(ctx, request);
             } else {
                 writeMessageFromContextHandler(ctx, "You're not sign in.\r\n");
@@ -99,8 +96,9 @@ public class TelnetServerHandler extends SimpleChannelInboundHandler<String> {
             joinChannelName = params[1];
         }
         channelGroup = group.get(joinChannelName);
+        /*
         if (channelGroup != null) {
-            channelGroup.writeAndFlush("Client " + userGroup.get(ctx.channel()).getLogin()
+            channelGroup.writeAndFlush("Client " + userChatChannelMap.get(ctx.channel()).getLogin()
                     + " joined to " + joinChannelName + "channel.\r\n");
             writeMessageFromContextHandler(ctx, "You're successfully joined to channel " +
                     joinChannelName + ".\r\n");
@@ -109,6 +107,7 @@ public class TelnetServerHandler extends SimpleChannelInboundHandler<String> {
             writeMessageFromContextHandler(ctx, "There is no channel with name " + joinChannelName + "\r\n"
                 + "Try command <channels> to see all channels.\r\n");
         }
+        */
     }
 
     protected void authorizeUser(ChannelHandlerContext ctx, String request) {
@@ -119,32 +118,71 @@ public class TelnetServerHandler extends SimpleChannelInboundHandler<String> {
         }
         String login = params[1];
         String password = params[2];
-        ctx.write(ctx.channel().hashCode()+"\r\n");
-        User userFromGroup = userGroup.get(ctx.channel());
+
+        //User newUser = new User(login, password);
+        User newUser = new User(login, password);
+
+        if(validateUser(newUser)) {
+            restoreChatChannelName(newUser);
+            if(newUser.equals(user)) {
+                writeMessageFromContextHandler(ctx, "You're already signed in.\r\n");
+            } else {
+                user = newUser;
+                writeMessageFromContextHandler(ctx, "You're successfully signed in." +
+                        " Your login is " + login + " \r\n");
+            }
+        } else {
+            userChatChannelMap.put(user, null);
+            writeMessageFromContextHandler(ctx, "You're successfully signed up." +
+                    " Your login is " + login + " \r\n");
+        }
+
+        /*
+        User userFromGroup = userChatChannelMap.get(ctx.channel());
         if(userFromGroup == null) {
-            userGroup.put(ctx.channel(), new User(login, password));
+            userChatChannelMap.put(ctx.channel(), new User(login, password));
             writeMessageFromContextHandler(ctx, "You're successfully logged in." +
                     " Your login is " + login + " \r\n");
         } else if(userFromGroup.getPassword() != password) {
             writeMessageFromContextHandler(ctx, "Wrong password.\r\n");
             return;
         }
+        */
     }
 
-    protected boolean checkUserAuthorization(ChannelHandlerContext ctx) {
-        User user = userGroup.get(ctx.channel());
+    /**
+     * Validate user.
+     * @param user User to validate
+     * @return boolean
+     */
+    protected boolean validateUser(User user) {
+        return userChatChannelMap.keySet().contains(user);
+    }
+
+    protected boolean checkUserAuthorization() {
         if(user == null)
             return false;
         return true;
     }
 
+    protected boolean restoreChatChannelName(User user) {
+        String chatChannelName = userChatChannelMap.get(user);
+        if(chatChannelName != null) {
+            chatChannel = chatChannelName;
+            return true;
+        }
+        return false;
+    }
+
     protected void showAllUsers(ChannelHandlerContext ctx) {
+        /*
         StringBuilder sb = new StringBuilder();
-        for(Channel channel : userGroup.keySet()) {
-            sb.append(userGroup.get(channel).getLogin());
+        for(Channel channel : userChatChannelMap.keySet()) {
+            sb.append(userChatChannelMap.get(channel).getLogin());
             sb.append("\r\n");
         }
         writeMessageFromContextHandler(ctx, sb.toString());
+        */
     }
 
     protected void showAllChannels(ChannelHandlerContext ctx) {
@@ -184,13 +222,14 @@ public class TelnetServerHandler extends SimpleChannelInboundHandler<String> {
                     }
                 }
             */
+        /*
         Iterator it = group.entrySet().iterator();
         while (it.hasNext()) {
             Map.Entry<String, ChannelGroup> pair = (Map.Entry)it.next();
             if(pair.getValue().contains(ctx.channel())) {
                 for (Channel c : pair.getValue()) {
                     if (c != ctx.channel()) {
-                        c.writeAndFlush("[" + userGroup.get(ctx.channel()).getLogin() + "] " + message + "\r\n");
+                        c.writeAndFlush("[" + userChatChannelMap.get(ctx.channel()).getLogin() + "] " + message + "\r\n");
                     } else {
                         c.writeAndFlush("[you] " + message + "\r\n");
                     }
@@ -199,6 +238,7 @@ public class TelnetServerHandler extends SimpleChannelInboundHandler<String> {
                 writeMessageFromContextHandler(ctx, "You need to join a channel to write messages.\r\n");
             }
         }
+        */
     }
 
     protected void writeMessageFromContextHandler(ChannelHandlerContext ctx, String message) {

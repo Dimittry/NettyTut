@@ -22,14 +22,15 @@ import java.util.Map;
 public class ChatServerInitializer
         extends ChannelInitializer<Channel>{
     private final Map<String, ChannelGroup> group;
-    private final Map<Channel, User> userGroup;
+    //private final Map<Channel, User> userGroup;
+    private final Map<User, String> userChatChannel;
     private static final StringDecoder DECODER = new StringDecoder();
     private static final StringEncoder ENCODER = new StringEncoder();
 
     public ChatServerInitializer(Map<String, ChannelGroup> group,
-                                 Map<Channel, User> userGroup) {
+                                 Map<User, String> userChatChannel) {
         this.group = group;
-        this.userGroup = userGroup;
+        this.userChatChannel = userChatChannel;
     }
 
     @Override
@@ -49,6 +50,6 @@ public class ChatServerInitializer
         pipeline.addLast(DECODER);
         pipeline.addLast(ENCODER);
         // and then business logic.
-        pipeline.addLast(new TelnetServerHandler(group, userGroup));
+        pipeline.addLast(new TelnetServerHandler(group, userChatChannel));
     }
 }
