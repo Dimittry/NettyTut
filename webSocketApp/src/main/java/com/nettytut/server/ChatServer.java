@@ -41,6 +41,7 @@ public class ChatServer {
 
     protected void initChannelGroups() {
         channelGroups.put("zepto", new DefaultChannelGroup(ImmediateEventExecutor.INSTANCE));
+        channelGroups.put("test", new DefaultChannelGroup(ImmediateEventExecutor.INSTANCE));
     }
 
     protected ChannelInitializer<Channel> createInitializer(
