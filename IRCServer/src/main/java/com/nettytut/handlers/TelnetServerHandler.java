@@ -13,10 +13,10 @@ import io.netty.util.AttributeKey;
 
 import java.net.InetAddress;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
 
 /**
@@ -34,9 +34,10 @@ public class TelnetServerHandler extends SimpleChannelInboundHandler<String> {
     private final static Map<String, BlockingQueue<String>> lastMessages;
     private final static int QUANTITY_OF_SHOWING_MESSAGES = 10;
     private final static int GROUP_CAPACITY = 10;
+    private final static String EMPTY_CHAT_GROUP_NAME = "empty";
 
     static {
-        lastMessages = new HashMap<>();
+        lastMessages = new ConcurrentHashMap<>();
         lastMessages.put("zepto", new LinkedBlockingQueue<>());
         lastMessages.put("test", new LinkedBlockingQueue<>());
     }
@@ -139,7 +140,7 @@ public class TelnetServerHandler extends SimpleChannelInboundHandler<String> {
 
     private boolean isUserInGroup() {
         String chatChannelName = getChatChannelNameForUser(user);
-        return chatChannelName != null;
+        return chatChannelName != EMPTY_CHAT_GROUP_NAME;
     }
 
     private void authorizeUser(ChannelHandlerContext ctx, String request) {
@@ -158,23 +159,24 @@ public class TelnetServerHandler extends SimpleChannelInboundHandler<String> {
         }
         User savedUser = getSavedUserByLogin(login);
         ctx.channel().attr(USER_ATTRIBUTE_KEY).set(newUser);
-        synchronized (this) {
             if (savedUser == null) {
-                userChatChannelMap.put(newUser, null);
+                userChatChannelMap.put(newUser, EMPTY_CHAT_GROUP_NAME);
                 user = newUser;
                 writeMessageFromContextHandler(ctx, "You're successfully signed up." +
                         " Your login is " + login);
             } else {
-                if(savedUser.equals(newUser)) {
-                    user = newUser;
-                    writeMessageFromContextHandler(ctx, "You're successfully signed in." +
-                            " Your login is " + login);
-                } else {
-                    writeMessageFromContextHandler(ctx, "Wrong password for login " + login);
+                synchronized (this) {
+                    if(savedUser.equals(newUser)) {
+                        user = newUser;
+                        writeMessageFromContextHandler(ctx, "You're successfully signed in." +
+                                " Your login is " + login);
+                    } else {
+                        writeMessageFromContextHandler(ctx, "Wrong password for login " + login);
+                        return;
+                    }
+                    addUserInChatChannel(ctx, newUser);
                 }
-                addUserInChatChannel(ctx, newUser);
             }
-        }
     }
 
     private User getSavedUserByLogin(String login) {

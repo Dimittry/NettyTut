@@ -16,13 +16,13 @@ import io.netty.util.concurrent.ImmediateEventExecutor;
 import java.net.InetSocketAddress;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class ChatServer {
     private final ChannelGroup channelGroup =
             new DefaultChannelGroup(ImmediateEventExecutor.INSTANCE);
-    private final Map<String, ChannelGroup> channelGroups = new HashMap<>();
-   // private final Map<Channel, User> userGroup = new HashMap<>();
-    private final Map<User, String> userChatChannelMap = new HashMap<>();
+    private final Map<String, ChannelGroup> channelGroups = new ConcurrentHashMap<>();
+    private final Map<User, String> userChatChannelMap = new ConcurrentHashMap<>();
     private final EventLoopGroup group = new NioEventLoopGroup();
     private Channel channel;
 
