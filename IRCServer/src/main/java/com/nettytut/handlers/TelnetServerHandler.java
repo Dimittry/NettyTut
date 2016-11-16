@@ -18,6 +18,7 @@ import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Handles a server-side channel.
@@ -28,13 +29,19 @@ public class TelnetServerHandler extends SimpleChannelInboundHandler<String> {
     private final Map<String, ChannelGroup> chatChannelGroup;
     /* Holds pairs of user and related name of ChannelGroup from chatChannelGroup */
     private final Map<User, String> userChatChannelMap;
-    private User user;
 
+    private User user;
+    /**
+    * Defines is need to save place in chat channel group for user
+    * when he has disconnected.
+    */
+    private static AtomicBoolean isSavePlace = new AtomicBoolean(true);
     private final static AttributeKey<User> USER_ATTRIBUTE_KEY = AttributeKey.valueOf("user");
     private final static Map<String, BlockingQueue<String>> lastMessages;
     private final static int QUANTITY_OF_SHOWING_MESSAGES = 10;
-    private final static int GROUP_CAPACITY = 10;
+    private final static int GROUP_CAPACITY = 3;
     private final static String EMPTY_CHAT_GROUP_NAME = "empty";
+    private final static String SET_SAVE_PLACE_TO_FALSE = "0";
 
     static {
         lastMessages = new ConcurrentHashMap<>();
@@ -65,6 +72,8 @@ public class TelnetServerHandler extends SimpleChannelInboundHandler<String> {
             close = true;
         } else if (request.startsWith("login")) {
             authorizeUser(ctx, request);
+        } else if (request.startsWith("saveplace")) {
+            changeSavePlace(request);
         } else if (request.startsWith("join")) {
             joinUserToChannel(request, ctx);
         } else if ("users".equals(request.toLowerCase())) {
@@ -104,7 +113,8 @@ public class TelnetServerHandler extends SimpleChannelInboundHandler<String> {
         String chatChannelName;
         synchronized (this) {
             if (isUserInGroup()) {
-                writeMessageFromContextHandler(ctx, "You're already in chat channel " + getChatChannelNameForUser(user));
+                writeMessageFromContextHandler(ctx, "You're already in chat channel "
+                        + getChatChannelNameForUser(user));
                 return;
             }
             String[] params = request.split(" ");
@@ -130,12 +140,23 @@ public class TelnetServerHandler extends SimpleChannelInboundHandler<String> {
     }
 
     protected boolean isChatChannelGroupFull(String chatChannelName) {
+        if(isSavePlace.get())
+            return checkWithSavePlace(chatChannelName);
+        else
+            return checkWithoutSavePlace(chatChannelName);
+    }
+
+    protected boolean checkWithoutSavePlace(String chatChannelName) {
         ChannelGroup chg = chatChannelGroup.get(chatChannelName);
         if(chg == null) return false;
-
         return (chg.size() >= GROUP_CAPACITY);
+    }
 
-
+    protected boolean checkWithSavePlace(String chatChannelName) {
+        int count = 0;
+        for(Map.Entry<User, String> entry : userChatChannelMap.entrySet())
+            if(entry.getValue().equals(chatChannelName)) count++;
+        return count >= GROUP_CAPACITY;
     }
 
     private boolean isUserInGroup() {
@@ -293,6 +314,17 @@ public class TelnetServerHandler extends SimpleChannelInboundHandler<String> {
             if(messages.size() >= QUANTITY_OF_SHOWING_MESSAGES) messages.poll();
             messages.offer(String.format("[%s]%s", user.getLogin(), message));
         }
+    }
+
+    private void changeSavePlace(String request) {
+        String[] params = request.split(" ");
+
+        if(params.length != 2) return;
+
+        if(params[1].equals(SET_SAVE_PLACE_TO_FALSE))
+            isSavePlace.set(false);
+        else
+            isSavePlace.set(true);
     }
 
     private void printMessages(ChannelHandlerContext ctx, String chatChannelName) {
