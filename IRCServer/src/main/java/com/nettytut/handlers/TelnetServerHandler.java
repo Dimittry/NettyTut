@@ -75,22 +75,21 @@ public class TelnetServerHandler extends SimpleChannelInboundHandler<String> {
         } else if ("bye".equals(request.toLowerCase())) {
             close = true;
         } else if (request.startsWith("login")) {
-            authorizeUser(ctx, request);
+            try {
+                authorizeUser(ctx, request);
+            } catch(IllegalArgumentException | IllegalStateException e){
+                writeMessageFromContextHandler(ctx, e.getMessage());
+            }
         } else if (request.startsWith("saveplace")) {
             changeSavePlace(request);
         } else if (request.startsWith("join")) {
-            joinUserToChannel(request, ctx);
-        } else if ("activeusers".equals(request.toLowerCase())) {
-            for (Channel ch : activeUsers) {
-                String msg;
-                User tmpUser = ch.attr(USER_ATTRIBUTE_KEY).get();
-                if(tmpUser != null) {
-                    msg = tmpUser.getLogin();
-                } else {
-                    msg = ch.getClass().getName();
-                }
-                ctx.writeAndFlush(msg + "\r\n");
+            try {
+                joinUserToChannel(request, ctx);
+            } catch(IllegalStateException e) {
+                writeMessageFromContextHandler(ctx, e.getMessage());
             }
+        } else if ("activeusers".equals(request.toLowerCase())) {
+            showActiveUsers(ctx);
         } else if ("users".equals(request.toLowerCase())) {
             try {
                 showAllUsersFromChannel(ctx);
@@ -101,11 +100,9 @@ public class TelnetServerHandler extends SimpleChannelInboundHandler<String> {
             if(isUserLoggedIn()) {
                 showMessage(ctx, request);
             } else {
-                writeMessageFromContextHandler(ctx, "You're not sign in.\r\n");
+                writeMessageFromContextHandler(ctx, "You need to sign in to write the messages.");
             }
         }
-        // Close the connection after sending 'Have a good day!'
-        // if the client has sent 'bye'.
         if (close) ctx.close();
     }
 
@@ -122,29 +119,22 @@ public class TelnetServerHandler extends SimpleChannelInboundHandler<String> {
 
     private void authorizeUser(ChannelHandlerContext ctx, String request) {
         String[] params = request.split(" ");
-        if(params.length < 3) {
-            writeMessageFromContextHandler(ctx, "Wrong login/password pair.");
-            return;
-        }
+        if(params.length < 3)
+            throw new IllegalArgumentException("Wrong login/password pair.");
+
         String login = params[1];
         String password = params[2];
-
         User newUser = new User(login, password);
-        if (user != null || newUser.equals(user)) {
-            writeMessageFromContextHandler(ctx, "You're already signed in.");
-            return;
-        }
-
-        if(isUserExists(newUser)) {
-            writeMessageFromContextHandler(ctx, "Such user already exists.");
-            return;
-        }
+        if (user != null || newUser.equals(user))
+            throw new IllegalStateException("You're already signed in.");
+        if(isUserExists(newUser))
+            throw new IllegalStateException("Such user already exists.");
 
         User savedUser = getSavedUserByLogin(login);
-        ctx.channel().attr(USER_ATTRIBUTE_KEY).set(newUser);
         if (savedUser == null) {
             userChatChannelMap.put(newUser, EMPTY_CHAT_GROUP_NAME);
             user = newUser;
+            ctx.channel().attr(USER_ATTRIBUTE_KEY).set(newUser);
             writeMessageFromContextHandler(ctx, "You're successfully signed up." +
                     " Your login is " + login);
         } else {
@@ -157,51 +147,37 @@ public class TelnetServerHandler extends SimpleChannelInboundHandler<String> {
                     writeMessageFromContextHandler(ctx, "Wrong password for login " + login);
                     return;
                 }
-                addUserInChatChannel(ctx, newUser);
+                ctx.channel().attr(USER_ATTRIBUTE_KEY).set(newUser);
+                addUserToChatChannel(ctx, newUser);
             }
         }
     }
 
     private void joinUserToChannel(String request, ChannelHandlerContext ctx) {
-        if(!isUserLoggedIn()) {
-            writeMessageFromContextHandler(ctx, "You're not logged in.");
-            return;
-        }
+        if(!isUserLoggedIn())
+            throw new IllegalStateException("You're not logged in.");
         String chatChannelName;
         synchronized (this) {
-            if (isUserInGroup()) {
-                writeMessageFromContextHandler(ctx, "You're already in chat channel "
-                        + getChatChannelNameForUser(user));
-                return;
-            }
+            if (isUserInGroup())
+                throw new IllegalStateException("You're already in chat channel " + getChatChannelNameForUser(user));
             String[] params = request.split(" ");
             if (params.length != 2) return;
-
             chatChannelName = params[1];
-
-            if (isChatChannelGroupFull(chatChannelName, ctx)) {
-                writeMessageFromContextHandler(ctx, "There is no place in channel " + chatChannelName);
-                return;
-            }
-
-            if (!chatChannelGroup.containsKey(chatChannelName)) {
-                writeMessageFromContextHandler(ctx, "There is no channels with name " + chatChannelName);
-                return;
-            }
+            if (isChatChannelGroupFull(chatChannelName, ctx))
+                throw new IllegalStateException("There is no place in channel " + chatChannelName);
+            if (!chatChannelGroup.containsKey(chatChannelName))
+                throw new IllegalStateException("There is no channels with name " + chatChannelName);
             ChannelGroup channelGroup = chatChannelGroup.get(chatChannelName);
-            if (!channelGroup.contains(ctx.channel())) {
+            if (!channelGroup.contains(ctx.channel()))
                 assignUserToChatChannel(ctx, chatChannelName);
-            }
         }
         printMessages(ctx, chatChannelName);
     }
 
     private boolean isChatChannelGroupFull(String chatChannelName, ChannelHandlerContext ctx) {
         if(isSavePlace.get()) {
-            System.err.println("isSavePlace true");
             return checkWithSavePlace(chatChannelName, ctx);
         } else {
-            System.err.println("isSavePlace false");
             return checkWithoutSavePlace(chatChannelName);
         }
     }
@@ -256,7 +232,7 @@ public class TelnetServerHandler extends SimpleChannelInboundHandler<String> {
         return user != null;
     }
 
-    private boolean addUserInChatChannel(ChannelHandlerContext ctx, User user) {
+    private boolean addUserToChatChannel(ChannelHandlerContext ctx, User user) {
         String chatChannelName = getChatChannelNameForUser(user);
 
         if(chatChannelName == null) {
@@ -284,7 +260,7 @@ public class TelnetServerHandler extends SimpleChannelInboundHandler<String> {
 
     private void assignUserToChatChannel(ChannelHandlerContext ctx, String chatChannelName) {
         ChannelGroup channelGroup = chatChannelGroup.get(chatChannelName);
-        if(!checkChannelInGroup(channelGroup, ctx.channel())) {
+        if(!checkUserChannelInGroup(channelGroup, ctx.channel())) {
             channelGroup.add(ctx.channel());
             //writeMessageFromContextHandler(ctx, "You have been added to chat channel " + chatChannelName);
         }
@@ -297,24 +273,11 @@ public class TelnetServerHandler extends SimpleChannelInboundHandler<String> {
         return userChatChannelMap.get(user);
     }
 
-    private boolean isUserInChannelGroup(User user) {
-        for(Map.Entry<String, ChannelGroup> entry : chatChannelGroup.entrySet()) {
-            for(Channel channel : entry.getValue()) {
-                System.err.println(channel.attr(USER_ATTRIBUTE_KEY).get().getLogin());
-                System.err.println(user.getLogin());
-                if(channel.attr(USER_ATTRIBUTE_KEY).get().getLogin().equals(user.getLogin()))
-                    return true;
-            }
-        }
-        return false;
-    }
-
     private boolean isUserExists(User user) {
         for(Channel ch : activeUsers) {
             User chUser = ch.attr(USER_ATTRIBUTE_KEY).get();
-            if(chUser != null && user.getLogin().equals(chUser.getLogin())) {
+            if(chUser != null && user.getLogin().equals(chUser.getLogin()))
                 return true;
-            }
         }
         return false;
     }
@@ -324,7 +287,7 @@ public class TelnetServerHandler extends SimpleChannelInboundHandler<String> {
      * @param chatChannelGroup
      * @param ch
      */
-    private boolean checkChannelInGroup(ChannelGroup chatChannelGroup, Channel ch) {
+    private boolean checkUserChannelInGroup(ChannelGroup chatChannelGroup, Channel ch) {
         if(chatChannelGroup == null) return false;
         return chatChannelGroup.contains(ch);
     }
@@ -404,5 +367,13 @@ public class TelnetServerHandler extends SimpleChannelInboundHandler<String> {
             i++;
         }
         writeMessageFromContextHandler(ctx, sb.toString());
+    }
+
+    private void showActiveUsers(ChannelHandlerContext ctx) {
+        for (Channel ch : activeUsers) {
+            User tmpUser = ch.attr(USER_ATTRIBUTE_KEY).get();
+            String msg = (tmpUser != null) ? tmpUser.getLogin() : ch.toString();
+            writeMessageFromContextHandler(ctx, msg);
+        }
     }
 }
