@@ -129,26 +129,25 @@ public class TelnetServerHandler extends SimpleChannelInboundHandler<String> {
             throw new IllegalStateException("You're already signed in.");
         if(isUserExists(newUser))
             throw new IllegalStateException("Such user already exists.");
-
-        User savedUser = getSavedUserByLogin(login);
-        if (savedUser == null) {
-            userChatChannelMap.put(newUser, EMPTY_CHAT_GROUP_NAME);
-            user = newUser;
-            ctx.channel().attr(USER_ATTRIBUTE_KEY).set(newUser);
-            writeMessageFromContextHandler(ctx, "You're successfully signed up." +
-                    " Your login is " + login);
-        } else {
-            synchronized (this) {
-                if(savedUser.equals(newUser)) {
-                    user = newUser;
-                    writeMessageFromContextHandler(ctx, "You're successfully signed in." +
-                            " Your login is " + login);
-                } else {
-                    writeMessageFromContextHandler(ctx, "Wrong password for login " + login);
-                    return;
-                }
+        synchronized (this) {
+            User savedUser = getSavedUserByLogin(login);
+            if (savedUser == null) {
+                userChatChannelMap.put(newUser, EMPTY_CHAT_GROUP_NAME);
+                user = newUser;
                 ctx.channel().attr(USER_ATTRIBUTE_KEY).set(newUser);
-                addUserToChatChannel(ctx, newUser);
+                writeMessageFromContextHandler(ctx, "You're successfully signed up." +
+                        " Your login is " + login);
+            } else {
+                    if(savedUser.equals(newUser)) {
+                        user = newUser;
+                        writeMessageFromContextHandler(ctx, "You're successfully signed in." +
+                                " Your login is " + login);
+                    } else {
+                        writeMessageFromContextHandler(ctx, "Wrong password for login " + login);
+                        return;
+                    }
+                    ctx.channel().attr(USER_ATTRIBUTE_KEY).set(newUser);
+                    addUserToChatChannel(ctx, newUser);
             }
         }
     }
@@ -273,7 +272,7 @@ public class TelnetServerHandler extends SimpleChannelInboundHandler<String> {
         return userChatChannelMap.get(user);
     }
 
-    private boolean isUserExists(User user) {
+    private synchronized boolean isUserExists(User user) {
         for(Channel ch : activeUsers) {
             User chUser = ch.attr(USER_ATTRIBUTE_KEY).get();
             if(chUser != null && user.getLogin().equals(chUser.getLogin()))
@@ -369,7 +368,7 @@ public class TelnetServerHandler extends SimpleChannelInboundHandler<String> {
         writeMessageFromContextHandler(ctx, sb.toString());
     }
 
-    private void showActiveUsers(ChannelHandlerContext ctx) {
+    private synchronized void showActiveUsers(ChannelHandlerContext ctx) {
         for (Channel ch : activeUsers) {
             User tmpUser = ch.attr(USER_ATTRIBUTE_KEY).get();
             String msg = (tmpUser != null) ? tmpUser.getLogin() : ch.toString();
